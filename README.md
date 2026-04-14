@@ -1,124 +1,193 @@
-# 🧲 Physics GNN Surrogate (Phase 1) — ばね–質量チェーン × GCN 基礎実装
+# 🧲 1D Spring–Mass Chain Surrogate via Julia & PyTorch Geometric
 
-1 次元の **ばね–質量直列系** を対象に、**グラフニューラルネットワーク（GNN）** によるサロゲートモデル構築の **Phase 1（基礎パイプライン）** をまとめたリポジトリです。
+**Phase 1 reference pipeline** — category-theoretic graph semantics (**Catlab.jl**), high-fidelity physics (**DifferentialEquations.jl**), and **PyTorch Geometric** GNN training, bridged by a versioned JSON intermediate representation.
 
-- **Julia** で物理モデルを定式化し、高精度な時間発展（参照解）を生成
-- **JSON** で疎結合にデータを受け渡し
-- **Python（PyTorch Geometric）** で **GCN** によるノード回帰の最小学習例を実行
-
-開発者がリポジトリを開いただけで「何を・どの順で・どのツールで動かすか」が追えることを目指した構成です。
+[🇺🇸 English](#english) | [🇯🇵 日本語](#japanese)
 
 ---
 
-## ✨ 概要
+<a id="english"></a>
 
-| 項目 | 内容 |
-|------|------|
-| **物理** | 質点 \(n\) 個の 1D 直列チェーン、隣接質点間はフックの法則（自由端） |
-| **入力 `x`** | 各ノードの初期 **位置・速度**（\(t=0\)） |
-| **教師 `y`** | `DifferentialEquations.jl` で積分した **\(t=t_1\)** における位置・速度 |
-| **グラフ** | バネで結ばれた隣接ペアを **双方向の有向辺** で表現（相互作用の対称性） |
-| **学習** | 2 層 **GCN** によるノードごとの **MSE 回帰**（ダミー学習デモ） |
+## 🇺🇸 English
+
+### Title & overview
+
+This repository delivers a **research-grade baseline (Phase 1)** for **graph surrogate modeling** of a **one-dimensional spring–mass chain** with free ends. The scientific stack is deliberately split across languages for **modularity and auditability**:
+
+| Layer | Role |
+|--------|------|
+| **Physics & topology (Julia)** | ODE ground truth + **compositional graph** encoding of interactions |
+| **IR (JSON)** | Loosely coupled, tool-agnostic **intermediate representation** |
+| **Learning (Python)** | **GCN** node regression on `torch_geometric.data.Data` |
+
+Rather than a toy “hello GNN” script, the design foregrounds **applied category theory (ACT)** as an organizing principle: interaction structure is not an ad-hoc adjacency matrix, but a **Catlab `Graph`** whose semantics align with categorical models of networks. That graph is serialized once, then consumed by standard geometric deep learning tooling.
+
+**Problem shape (default demo):** node features **`x`** = initial position & velocity at \(t{=}0\); supervised targets **`y`** = position & velocity at \(t{=}t_1\) from a high-accuracy ODE solve. Springs between neighbors are represented as **bidirected edges** to reflect symmetric coupling.
 
 ---
 
-## 🏗 アーキテクチャの特徴
+### Architecture
 
-### 1. Julia による参照解（グラウンドトゥルース）生成
+| Stage | Technology | Responsibility |
+|--------|------------|----------------|
+| **Ground truth** | **DifferentialEquations.jl** | Time integration of the first-order state \(z=[u; v]\) with tight tolerances (`Tsit5`, `abstol`/`reltol` \(\sim 10^{-10}\)) |
+| **Topology & export** | **Catlab.jl** (`Catlab.Graphs`) | Directed graph IR of the mechanical network; JSON export with explicit schema |
+| **Surrogate** | **PyTorch Geometric** | Two-layer **GCN** + MSE training (`train_spring_mass_gcn.py`) |
 
-- **`DifferentialEquations.jl`** … 連立 1 階化した状態 \(z=[u_1,\ldots,u_n,v_1,\ldots,v_n]\) の ODE を **高精密**（`Tsit5` + 厳しめの許容誤差）で積分し、時刻 \(t_1\) の状態を `y` として取得します。
-- **`Catlab.jl`（`Catlab.Graphs`）** … 系の **トポロジー（相互作用の構造）** を有向グラフとして表し、そのまま JSON スキーマに載せやすい形に整えます。
+**JSON schema:** `format: "catlab_directed_graph_v1"` with `num_nodes`, `edges`, optional `x` / `y`.
 
-メインのデータ生成フローは `spring_mass_chain_export.jl` に集約されています。
+---
 
-### 2. JSON を介したデータ連携（Julia ↔ Python）
+### ⚠️ Crucial technical detail: 1-based → 0-based index contract
 
-- フォーマット識別子: **`catlab_directed_graph_v1`**
-- フィールド例: `num_nodes`, `edges`, `x`（ノード特徴）, `y`（ターゲット）
+Julia and Catlab use **1-based vertex IDs**. PyTorch Geometric expects **`edge_index` in 0-based node indices**. **This repository encodes the contract at export time:** every directed edge \((s,t)\) is written to JSON as \((s{-}1,\, t{-}1)\). Downstream Python code therefore **requires no offset hacks** — the JSON is already aligned with `Data.edge_index`.
 
-#### 🔢 超重要: 頂点インデックスは **1-based（Julia）→ 0-based（JSON）** に変換済み
+Implementation (`export_catlab_graph_json.jl`):
 
-Julia / Catlab 側の頂点 ID は **1 始まり** ですが、JSON に書き出す段階で **各辺の `src`, `tgt` から 1 を引いて 0 始まり** にしています。  
-そのため Python 側では **`torch_geometric.data.Data` の `edge_index` とそのまま整合**し、追加のインデックス補正なしで読み込めます。
-
-該当実装（Julia）:
-
-```14:18:export_catlab_graph_json.jl
+```julia
 function catlab_graph_edges_0based(g)
     pairs = Vector{Vector{Int}}()
     for e in edges(g)
         push!(pairs, [src(g, e) - 1, tgt(g, e) - 1])
     end
+    pairs
+end
 ```
 
-### 3. Python（PyTorch Geometric）による GNN 学習
-
-- `import_catlab_json_to_pyg.py` … JSON → `Data` 変換
-- `train_spring_mass_gcn.py` … 2 層 **GCN** で `x` から `y`（またはフォールバック）への回帰と **MSE** 最適化
+**Design rationale:** treat **index semantics as part of the IR specification**, not an implicit convention scattered across loaders. That choice reduces cross-language defects and makes the pipeline easier to validate in regulated or collaborative R&D settings.
 
 ---
 
-## 📁 ファイル構成
+### File structure
 
-| ファイル | 役割 |
-|----------|------|
-| **`Project.toml`** | Julia 依存関係（`Catlab`, `DifferentialEquations`, `JSON3`）の宣言 |
-| **`Manifest.toml`** | Julia のパッケージ解決結果（再現性のためコミット推奨） |
-| **`export_catlab_graph_json.jl`** | Catlab の有向グラフを PyG 向け JSON にシリアライズ。辺の **0-based 化**、`x` / `y` のオプション付与 |
-| **`spring_mass_chain_export.jl`** | 5 質点チェーンの例: グラフ構築 → ODE 積分 → `spring_mass_chain_5.json` 等へエクスポート |
-| **`spring_mass_chain_5.json`** | 上記パイプラインの **サンプル出力**（`format`, `num_nodes`, `edges`, `x`, `y`） |
-| **`import_catlab_json_to_pyg.py`** | `catlab_directed_graph_v1` を読み、`edge_index` / `x` / `y` を持つ `Data` を構築 |
-| **`train_spring_mass_gcn.py`** | サンプル JSON を読み込み、2 層 GCN の学習ループ（デモ） |
-| **`requirements.txt`** | Python 側の依存関係（`torch`, `torch-geometric`） |
+| Path | Purpose |
+|------|---------|
+| **`Project.toml`**, **`Manifest.toml`** | Julia environment declaration & reproducible resolution |
+| **`export_catlab_graph_json.jl`** | Catlab `Graph` → JSON (`catlab_directed_graph_v1`); **0-based edges**; optional `x`, `y` |
+| **`spring_mass_chain_export.jl`** | End-to-end demo: build chain graph → integrate ODE → write e.g. `spring_mass_chain_5.json` |
+| **`spring_mass_chain_5.json`** | Committed sample artifact (graph + `x` / `y`) |
+| **`import_catlab_json_to_pyg.py`** | JSON → `torch_geometric.data.Data` |
+| **`train_spring_mass_gcn.py`** | GCN training loop (MSE node regression) |
+| **`requirements.txt`** | Python dependencies (`torch`, `torch-geometric`) |
 
-> `export_catlab_graph_json.jl` を **単体のスクリプト**として実行すると、小さな例グラフの `graph_from_catlab.json` を生成するブロックがあります（`include` 用途とは別の動作確認用）。
+> Running **`export_catlab_graph_json.jl` as `PROGRAM_FILE`** also emits a tiny `graph_from_catlab.json` for smoke tests — distinct from the `include` path used by the spring–mass exporter.
 
 ---
 
-## 🚀 環境構築と実行手順
+### Quick start / usage
 
-### Julia 側
-
-1. **依存関係のインストール**（プロジェクトルートで）:
+**Julia — instantiate & generate data**
 
 ```bash
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
-```
-
-2. **データ生成**（デフォルトで `spring_mass_chain_5.json` を出力）:
-
-```bash
 julia --project=. spring_mass_chain_export.jl
 ```
 
-`spring_mass_chain_export.jl` 先頭のコメントにも、質点数・物理定数・出力ファイル名などを `main(; ...)` で変えられる旨が記載されています。
-
-### Python 側
-
-1. **仮想環境の作成（推奨）** 後、依存関係のインストール:
+**Python — install & train**
 
 ```bash
 pip install -r requirements.txt
-```
-
-2. **学習スクリプトの実行**（先に Julia で JSON を生成しておくこと）:
-
-```bash
 python train_spring_mass_gcn.py
 ```
 
-#### ⚠️ PyTorch Geometric について（軽い注意）
-
-- **CPU のみ**の環境では、上記の `pip install` で十分なことが多いです。
-- **GPU（CUDA）** を使う場合は、**PyTorch 本体を CUDA 対応ビルドで入れたうえで**、PyTorch / CUDA の組み合わせに対応した **PyG の wheel** が必要になることがあります。環境に合わせて [PyTorch Geometric のインストール案内](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html) を参照してください。
-- トラブル時は、まず `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"` で PyTorch 側を確認し、その後 `torch_geometric` のインポートを試すと切り分けがしやすいです。
+**PyTorch Geometric:** CPU-only setups often work with `pip install -r requirements.txt`. For **CUDA**, install a **matching** PyTorch build first, then follow the [official PyG installation matrix](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html) for wheels compatible with your CUDA/toolchain.
 
 ---
 
-## 📚 関連情報
+### Related
 
-本リポジトリは、Zennの連載記事のコンパニオン（補助実装）として用意されています。背景・理論・発展的なトピックは以下の連載本編を参照してください。
+Companion implementation for a **Zenn article series** (Japanese). For narrative context, theory, and roadmap, see the series (links in the Japanese section below).
 
-* **第1回:** [【Julia/Python】サロゲートモデル構築(基礎編)1：全体アーキテクチャとデータ連携の設計思想](https://zenn.dev/kohmaruworks/articles/phase1-architecture)
-* **第2回:** （執筆中）
-* **第3回:** （執筆中）
+---
+
+<a id="japanese"></a>
+
+## 🇯🇵 日本語
+
+### タイトルと概要
+
+本リポジトリは、**1 次元ばね–質量直列系（自由端）** を対象とした、**Julia と PyTorch Geometric を組み合わせたグラフサロゲートの Phase 1 基盤**です。単なる入門用スクリプトの寄せ集めではなく、**応用圏論（ACT）の観点から相互作用をグラフとして記述する（Catlab.jl）** と、**高精度な参照解（DifferentialEquations.jl）**、**標準的な幾何学習スタック（PyG）** を、**版付き JSON 中間表現**で疎結合に接続する **R&D 向けの最小パイプライン** を提示します。
+
+| 層 | 役割 |
+|----|------|
+| **物理・トポロジ（Julia）** | ODE によるグラウンドトゥルース + **合成可能なグラフ IR** |
+| **中間表現（JSON）** | ツール非依存の **疎結合データ契約** |
+| **学習（Python）** | **GCN** によるノード回帰（MSE） |
+
+**デフォルトデモ:** ノード特徴 **`x`** = \(t{=}0\) の位置・速度、教師 **`y`** = 高精密積分による \(t{=}t_1\) の位置・速度。隣接質点間のバネは **双方向有向辺** で表し、相互作用の対称性を明示します。
+
+---
+
+### アーキテクチャ
+
+| 段階 | 技術 | 担当 |
+|------|------|------|
+| **参照解** | **DifferentialEquations.jl** | 1 階化状態 \(z=[u; v]\) の時間発展（厳しめ許容誤差） |
+| **トポロジ・書き出し** | **Catlab.jl**（`Catlab.Graphs`） | 力学ネットワークの有向グラフ化と JSON シリアライズ |
+| **サロゲート** | **PyTorch Geometric** | 2 層 **GCN** + MSE（`train_spring_mass_gcn.py`） |
+
+**JSON:** `format: "catlab_directed_graph_v1"`、`num_nodes`、`edges`、任意の `x` / `y`。
+
+---
+
+### ⚠️ 技術上の要諦: 1-based → 0-based の契約をエクスポートで固定する
+
+Julia / Catlab の頂点 ID は **1 始まり**ですが、PyTorch Geometric の **`edge_index` は 0 始まり**です。本プロジェクトでは **JSON 書き出し時点で** 各辺の端点から **1 を減算**し、Python 側が **追加のインデックス補正なし**で `Data` を構築できるようにしています。これは実装の都合ではなく、**中間表現の仕様としてインデックス意味を固定する**設計です（共同研究・受託開発・再現性の観点で有利）。
+
+実装（`export_catlab_graph_json.jl`）:
+
+```julia
+function catlab_graph_edges_0based(g)
+    pairs = Vector{Vector{Int}}()
+    for e in edges(g)
+        push!(pairs, [src(g, e) - 1, tgt(g, e) - 1])
+    end
+    pairs
+end
+```
+
+---
+
+### ファイル構成
+
+| パス | 役割 |
+|------|------|
+| **`Project.toml`**, **`Manifest.toml`** | Julia 環境の宣言とロック |
+| **`export_catlab_graph_json.jl`** | Catlab `Graph` → JSON（**辺は 0-based**）、`x` / `y` 任意 |
+| **`spring_mass_chain_export.jl`** | チェーングラフ構築 → ODE 積分 → `spring_mass_chain_5.json` 等へ出力 |
+| **`spring_mass_chain_5.json`** | サンプル成果物（`format`, `num_nodes`, `edges`, `x`, `y`） |
+| **`import_catlab_json_to_pyg.py`** | JSON → `torch_geometric.data.Data` |
+| **`train_spring_mass_gcn.py`** | GCN 学習ループ（デモ） |
+| **`requirements.txt`** | Python 依存（`torch`, `torch-geometric`） |
+
+> `export_catlab_graph_json.jl` を **単体スクリプト**として実行すると、小グラフの `graph_from_catlab.json` を吐く検証用ブロックがあります（`spring_mass_chain_export.jl` からの `include` 用途とは別）。
+
+---
+
+### クイックスタート / 使い方
+
+**Julia — 環境構築とデータ生成**
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+julia --project=. spring_mass_chain_export.jl
+```
+
+**Python — インストールと学習**
+
+```bash
+pip install -r requirements.txt
+python train_spring_mass_gcn.py
+```
+
+**PyTorch Geometric:** CPU のみなら上記で足りることが多いです。**GPU（CUDA）** 利用時は、先に **CUDA 対応の PyTorch** を入れ、その組み合わせに合わせて [PyG 公式のインストール手順](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html) で wheel を選んでください。
+
+---
+
+### 関連情報（Zenn 連載）
+
+本リポジトリは **Zenn 連載のコンパニオン実装**です。全体設計・理論・発展編は記事側を参照してください。
+
+- **第1回:** [【Julia/Python】サロゲートモデル構築(基礎編)1：全体アーキテクチャとデータ連携の設計思想](https://zenn.dev/kohmaruworks/articles/phase1-architecture)
+- **第2回:** （執筆中）
+- **第3回:** （執筆中）
