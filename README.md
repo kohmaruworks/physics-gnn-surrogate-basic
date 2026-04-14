@@ -1,4 +1,4 @@
-# 🧲 Physics GNN Surrogate — Phase 1 · 1D Spring–Mass Chain
+# Physics GNN Surrogate · 1D Spring–Mass Chain — Phase 1
 
 [![Julia](https://img.shields.io/badge/Julia-Project-9558B2?style=for-the-badge&logo=julia&logoColor=white)](https://julialang.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
