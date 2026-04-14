@@ -14,7 +14,7 @@
 
 ## 🇺🇸 English
 
-### 📌 Title & overview
+### 📌 overview
 
 Graph surrogate baseline for a **1D spring–mass chain** (Hookean springs, **free ends**). Interaction topology is a **Catlab `Graph`** (compositional, ACT-friendly); dynamics are integrated in Julia and serialized for **GCN** node regression in PyTorch Geometric.
 
@@ -141,7 +141,7 @@ python train_spring_mass_gcn.py
 
 ## 🇯🇵 日本語
 
-### 📌 タイトルと概要
+### 📌 概要
 
 **1 次元ばね–質量直列系**（隣接間はフックの法則、**自由端**）を対象とした、**グラフサロゲート Phase 1** の参照実装です。相互作用のトポロジは **Catlab の有向グラフ**で記述し、Julia で参照解を生成したうえで、**PyTorch Geometric（GCN）** による学習に回します。
 
