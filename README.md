@@ -260,4 +260,5 @@ python train_spring_mass_gcn.py
 | 回 | リンク |
 |------|------|
 | **第1回（アーキテクチャ・IR）** | [Zenn — 全体アーキテクチャとデータ連携の設計思想](https://zenn.dev/kohmaruworks/articles/phase1-architecture) |
-| **第2回・第3回** | *執筆中* |
+| **第2回（Julia・データ生成）** | [Zenn — 【Julia×Python】サロゲートモデル構築(基礎編) 第2回：Juliaによる物理データ生成とJSONエクスポート](https://zenn.dev/kohmaruworks/articles/phase1-data-generation) |
+| **第3回（Python・PyG学習）** | [Zenn — 【Julia×Python】サロゲートモデル構築(基礎編) 第3回：Python(PyG)によるGNN学習と推論パイプライン](https://zenn.dev/kohmaruworks/articles/phase1-python-training) |
