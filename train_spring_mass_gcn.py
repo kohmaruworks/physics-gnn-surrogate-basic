@@ -1,37 +1,25 @@
 """
-spring_mass_chain_5.json を読み込み、2 層 GCN でノード回帰（MSE）のダミー学習を行う。
+data/spring_mass_chain_5.json を読み込み、2 層 GCN でノード回帰（MSE）のダミー学習を行う。
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 
-from import_catlab_json_to_pyg import catlab_json_to_data
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT / "src_python") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "src_python"))
 
-
-class TwoLayerGCN(nn.Module):
-    """入力 2 → 隠れ 16 → 出力 2（ノードごと）。"""
-
-    def __init__(self, in_channels: int = 2, hidden_channels: int = 16, out_channels: int = 2):
-        super().__init__()
-        self.conv1 = GCNConv(in_channels, hidden_channels)
-        self.conv2 = GCNConv(hidden_channels, out_channels)
-
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-        return x
+from import_json_to_pyg import graph_json_to_data
+from models.physics_gnn_base import TwoLayerGCN
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parent
-    json_path = root / "spring_mass_chain_5.json"
+    json_path = _ROOT / "data" / "spring_mass_chain_5.json"
     if not json_path.is_file():
         raise FileNotFoundError(
             f"見つかりません: {json_path}\n"
@@ -41,7 +29,7 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
-    data = catlab_json_to_data(json_path)
+    data = graph_json_to_data(json_path)
     if data.x is None:
         raise ValueError("JSON にノード特徴 x がありません。")
     data = data.to(device)

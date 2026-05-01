@@ -11,7 +11,7 @@
 using DifferentialEquations
 using Random
 
-include(joinpath(@__DIR__, "export_catlab_graph_json.jl"))
+include(joinpath(@__DIR__, "src_julia", "export_graph_json.jl"))
 
 """質点数 `n` の直列チェーン。辺は (i,i+1) と (i+1,i) の両方向。"""
 function spring_mass_chain_graph(n::Int)
@@ -66,7 +66,7 @@ end
 function main(;
     n::Int = 5,
     seed::Union{Nothing,Integer} = 42,
-    outfile = "spring_mass_chain_5.json",
+    outfile = "data/spring_mass_chain_5.json",
     k::Float64 = 1.0,
     m::Float64 = 1.0,
     t1::Float64 = 0.1,
@@ -78,6 +78,7 @@ function main(;
     y = integrate_spring_mass_chain(x, n, k, m, t1)
 
     path = joinpath(@__DIR__, outfile)
+    mkpath(dirname(path))
     save_catlab_graph_json(path, g; x=x, y=y, pretty=true)
     println("exported: ", path)
     println("  nv = ", nv(g), ", ne = ", ne(g))

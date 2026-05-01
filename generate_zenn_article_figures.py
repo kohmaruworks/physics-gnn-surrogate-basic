@@ -18,24 +18,15 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 
 ROOT = Path(__file__).resolve().parent
+_SRC = ROOT / "src_python"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
+from models.physics_gnn_base import TwoLayerGCN
+
 ZENN_IMAGES = Path(__file__).resolve().parents[1] / "zenn-articles" / "images"
-
-
-class TwoLayerGCN(nn.Module):
-    def __init__(self, in_channels: int = 2, hidden_channels: int = 16, out_channels: int = 2):
-        super().__init__()
-        self.conv1 = GCNConv(in_channels, hidden_channels)
-        self.conv2 = GCNConv(hidden_channels, out_channels)
-
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-        return x
 
 
 def load_edges_and_n(json_path: Path) -> tuple[list[tuple[int, int]], int]:
@@ -85,7 +76,7 @@ def plot_julia_graph(edges: list[tuple[int, int]], num_nodes: int, out_path: Pat
         "Keywords (payload):\n"
         "  vertex i  ->  JSON rows x[i,:] (u,v @ t=0), y[i,:] (u,v @ t=t1, ODE)\n"
         "  directed edges  ->  spring-chain topology (who couples whom)\n"
-        "  export  ->  save_catlab_graph_json: edges -> 0-based in JSON"
+        "  export  ->  save_catlab_graph_json (src_julia/export_graph_json.jl): edges -> 0-based in JSON"
     )
     ax.text(
         0.02,
@@ -173,11 +164,10 @@ def plot_pyg_graph(edges: list[tuple[int, int]], num_nodes: int, out_path: Path)
 
 
 def run_training_loss(json_path: Path, out_path: Path) -> None:
-    sys.path.insert(0, str(ROOT))
-    from import_catlab_json_to_pyg import catlab_json_to_data
+    from import_json_to_pyg import graph_json_to_data
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data = catlab_json_to_data(json_path)
+    data = graph_json_to_data(json_path)
     if data.x is None or data.y is None:
         raise ValueError("JSON に x, y が必要です。")
     data = data.to(device)
@@ -213,7 +203,7 @@ def run_training_loss(json_path: Path, out_path: Path) -> None:
 
 
 def main() -> None:
-    json_path = ROOT / "spring_mass_chain_5.json"
+    json_path = ROOT / "data" / "spring_mass_chain_5.json"
     if not json_path.is_file():
         raise FileNotFoundError(json_path)
 

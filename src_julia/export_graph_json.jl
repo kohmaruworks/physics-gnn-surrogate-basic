@@ -1,8 +1,8 @@
 # Catlab.Graphs の有向グラフ（Graph）を PyTorch Geometric 向け JSON に書き出す。
 #
-# 初回のみ: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+# 0-based Contract: 頂点番号の `−1` は本ファイル（Julia エクスポート境界）でのみ行う。
 #
-# 頂点番号は JSON 内で 0 始まり（PyG の edge_index と一致）。
+# 初回のみ: julia --project=. -e 'using Pkg; Pkg.instantiate()'
 
 using Catlab
 using Catlab.Graphs
@@ -57,14 +57,15 @@ function save_catlab_graph_json(path::AbstractString, g; x=nothing, y=nothing, p
     path
 end
 
-# ---- 使用例（`include` した場合はこのブロックをコメントアウトしてもよい） ----
+# ---- スモークテスト: `PROGRAM_FILE` として実行したとき `data/graph_data.json` を出力 ----
 if abspath(PROGRAM_FILE) == @__FILE__
+    root = dirname(@__DIR__)
     g = Graph()
     add_vertices!(g, 3)
     add_edges!(g, [1, 2], [2, 3])
-    # 例: 頂点特徴 (3 頂点, 次元 2)
     x = Float64[1 0; 0 1; 1 1]
-    out = joinpath(@__DIR__, "graph_from_catlab.json")
+    out = joinpath(root, "data", "graph_data.json")
+    mkpath(dirname(out))
     save_catlab_graph_json(out, g; x=x, pretty=true)
     println("wrote ", out)
 end

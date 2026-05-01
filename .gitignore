@@ -5,3 +5,9 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Generated JSON（`data/graph_data.json` はスモーク用サンプル、`data/spring_mass_chain_5.json` は学習用サンプルとして追跡）
+*.json
+!data/graph_data.json
+!data/spring_mass_chain_5.json
+
