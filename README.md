@@ -182,6 +182,10 @@ python src_python/import_json_to_pyg.py
 python src_python/import_json_to_pyg.py path/to/file.json
 ```
 
+### License
+
+This project is licensed under the MIT License. See the [`LICENSE`](LICENSE) file for details.
+
 ### 📚 References (Foundation series on Zenn)
 
 | Part | Link |
@@ -349,10 +353,6 @@ python src_python/import_json_to_pyg.py
 | **第2回（Julia・データ生成）** | [Zenn — 第2回：Juliaによる物理データ生成とJSONエクスポート](https://zenn.dev/kohmaruworks/articles/phase1-data-generation) |
 | **第3回（Python・PyG学習）** | [Zenn — 第3回：Python(PyG)によるGNN学習と推論パイプライン](https://zenn.dev/kohmaruworks/articles/phase1-python-training) |
 
----
-
-## License
-
-This project is licensed under the MIT License. See the [`LICENSE`](LICENSE) file for details.
+### ライセンス
 
 本プロジェクトは **MIT License** の下で公開されています。詳細は [`LICENSE`](LICENSE) を参照してください。
